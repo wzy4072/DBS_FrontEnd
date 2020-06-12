@@ -51,16 +51,8 @@
           style="width: 100%;"
         >
           <!-- {roomId roomName roomFee  cleanFee waterPrice electricityPrice waterMeter electricityMeter } -->
-          <el-table-column
-            prop="roomName"
-            label="房间号"
-            width="120"
-          />
-          <el-table-column
-            prop="lastwaterMeter"
-            label="上期水表"
-            width="120"
-          />
+          <el-table-column prop="roomName" label="房间号" width="120" />
+          <el-table-column prop="lastwaterMeter" label="上期水表" width="120" />
           <el-table-column prop="waterMeter" label="本期水表" width="120">
             <template slot-scope="scope">
               <el-input v-model="scope.row.waterMeter" />
@@ -123,7 +115,7 @@
           <el-table-column label="电费" width="120">
             <template slot-scope="scope">
               <span>{{
-                `(${scope.row.useElectricityMeter}*${scope.row.electricityPrice})= ${scope.row.electricityFees}`
+                `(${scope.row.useElectricity}*${scope.row.electricityPrice})= ${scope.row.electricityFees}`
               }}</span>
             </template>
           </el-table-column>
@@ -141,11 +133,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column
-            prop="roomAmount"
-            label="总费用"
-            width="120"
-          />
+          <el-table-column prop="roomAmount" label="总费用" width="120" />
 
           <el-table-column label="用水量" width="120">
             <template slot-scope="scope">
@@ -157,7 +145,7 @@
           <el-table-column label="用电量" width="120">
             <template slot-scope="scope">
               <span>{{
-                `(${scope.row.lastelectricityMeter}-${scope.row.electricityMeter})= ${scope.row.useElectricityMeter}`
+                `(${scope.row.lastelectricityMeter}-${scope.row.electricityMeter})= ${scope.row.useElectricity}`
               }}</span>
             </template>
           </el-table-column>
@@ -198,13 +186,19 @@
   </div>
 </template>
 <script>
+import {
+  getBuildings,
+  getRoomsByBuildingId,
+  addPhase
+} from '@/api/buildingApi'
+
 function getArrayItemById(arr, keyName, keyValue) {
   let result = null
   if (!arr || arr.length === 0) return result
 
   for (let i = 0; i < arr.length; i++) {
     const element = arr[i]
-    if (element[keyName] == keyValue) {
+    if (element[keyName] === keyValue) {
       result = element
       break
     }
@@ -231,7 +225,6 @@ export default {
 
       meterTableData: [],
       lastPhaseId: '',
-      otherCharges: [],
       chargeTableData: [],
 
       multipleSelection: [],
@@ -246,7 +239,7 @@ export default {
   mounted() {
     // 获取建筑列表
     this.getBuildingList()
-    this.buildingId = this.$route.query.buildingId
+    this.buildingId = parseInt(this.$route.query.buildingId) || null
     this.getCharges()
     this.getTableData()
   },
@@ -255,9 +248,9 @@ export default {
 
     async setMatters() {
       this.active = 1
-      const { roomList, otherCharges } = await this.getChargesAndRoomsInfo()
-      this.roomList = roomList
-      this.otherCharges = otherCharges
+      const res = await this.getChargesAndRoomsInfo()
+      this.roomList = res.result
+      this.otherCharges = []
       this.lastPhaseMeter = await this.getLastPhaseInfoByBuildingId()
       this.generateMeterTable()
     },
@@ -265,74 +258,20 @@ export default {
       this.active--
     },
     getBuildingList() {
-      // apiget
-      this.buildingList = [
-        { id: 1, buildingName: 'A栋' },
-        { id: 66, buildingName: 'b栋' },
-        { id: 88, buildingName: 'C栋' }
-      ]
-      // 根据默认或选中的建筑ID查找 1上一档期水电数 2 月租等费用及房间列表
-    },
-    getLastPhaseInfoByBuildingId() {
-      return new Promise((resolve) => {
-        // api请求上期水电表数据
-        const res = {
-          data: [
-            { roomId: 101, waterMeter: 100, electricityMeter: 50 },
-            { roomId: 102, waterMeter: 100, electricityMeter: 50 },
-            { roomId: 103, waterMeter: 100, electricityMeter: 50 }
-          ]
-        }
-        resolve(res)
+      getBuildings().then(res => {
+        this.buildingList = res.result
       })
     },
+    getLastPhaseInfoByBuildingId() {},
     getChargesAndRoomsInfo() {
-      return new Promise((resolve) => {
-        const res = {
-          roomList: [
-            {
-              roomId: 101,
-              roomName: 101,
-              roomFee: 2000,
-              cleanFee: 30,
-              waterPrice: 5.6,
-              electricityPrice: 1.8
-            },
-            {
-              roomId: 102,
-              roomName: 102,
-              roomFee: 3000,
-              cleanFee: 30,
-              waterPrice: 5.6,
-              electricityPrice: 1.8
-            },
-            {
-              roomId: 103,
-              roomName: 103,
-              roomFee: 2000,
-              cleanFee: 30,
-              waterPrice: 5.6,
-              electricityPrice: 1.8
-            },
-            {
-              roomId: 201,
-              roomName: 201,
-              roomFee: 1000,
-              cleanFee: 30,
-              waterPrice: 5.6,
-              electricityPrice: 1.8
-            }
-          ],
-          otherCharges: [
-            { chargeName: '宽带费', chargeAmount: '90', key: 'ocId2' }
-          ]
-        }
-        resolve(res)
+      const { buildingId } = this
+      return getRoomsByBuildingId(buildingId).then(res => {
+        return res
       })
     },
     generateMeterTable() {
       // row  {roomId roomName roomFee  cleanFee waterPrice electricityPrice waterMeter electricityMeter }
-      this.meterTableData = this.roomList.map((room) => {
+      this.meterTableData = this.roomList.map(room => {
         const lastPhase = getArrayItemById(
           this.lastPhaseMeter,
           'roomId',
@@ -352,31 +291,35 @@ export default {
     // 根据水电表计算本月总费用
     generateChargeTable() {
       //  {roomId roomName roomFee  cleanFee waterPrice electricityPrice waterMeter electricityMeter }
-      // {  roomAmount useWater  waterFees  useElectricityMeter electricityFees  }
+      // {  roomAmount useWater  waterFees  useElectricity electricityFees  }
       // otherFees
 
       let otherFees = 0
       const otherFeesObj = {}
-      this.otherCharges.map((fee) => {
+      this.otherCharges.map(fee => {
         otherFees += parseInt(fee.chargeAmount)
         otherFeesObj[fee.key] = fee.chargeAmount
       })
 
-      this.chargeTableData = this.meterTableData.map((room) => {
+      this.chargeTableData = this.meterTableData.map(room => {
         const useWater = room.waterMeter - room.lastwaterMeter
-        const useElectricityMeter =
+        const useElectricity =
           room.electricityMeter - room.lastelectricityMeter
         const waterFees = (1000 * room.waterPrice * useWater) / 1000
         const electricityFees =
-          (1000 * room.electricityPrice * useElectricityMeter) / 1000
+          (1000 * room.electricityPrice * useElectricity) / 1000
 
         const roomAmount =
-          room.roomFee + waterFees + electricityFees + room.cleanFee + otherFees
-
+          100 * room.roomFee +
+          100 * waterFees +
+          100 * electricityFees +
+          100 * room.cleanFee +
+          100 * otherFees
         return Object.assign({}, room, otherFeesObj, {
-          roomAmount,
+          roomId: room.id,
+          roomAmount: roomAmount / 100,
           useWater,
-          useElectricityMeter,
+          useElectricity,
           waterFees,
           electricityFees
         })
@@ -386,6 +329,35 @@ export default {
     },
     savePhase() {
       // api saveData
+      const chargeList = []
+      const metersList = []
+      this.chargeTableData.map(row => {
+        metersList.push({
+          buildingId: this.buildingId,
+          phaseId: null,
+          waterMeter: row.waterMeter,
+          electricityMeter: row.electricityMeter
+        })
+        delete row.useWater
+        delete row.useElectricity
+        delete row.id
+        chargeList.push(row)
+      })
+
+      const sendData = {
+        phaseInfo: {
+          phaseName: this.phaseName,
+          buildingId: this.buildingId
+        },
+        chargeList,
+        metersList
+      }
+      //   window.sendData = sendData
+      addPhase(sendData).then(res => {
+        if (res.result.phaseId) {
+          this.$message.success('保存成功！')
+        }
+      })
 
       this.active++
     },
@@ -396,10 +368,11 @@ export default {
       })
     },
     test() {
-      this.$router.push({
-        paht: '/phaseManage/add',
-        query: { buildingId: 66 }
+      addPhase(window.sendData).then(res => {
+        console.log(res)
       })
+
+      this.active++
     },
     getTableData() {},
     getCharges() {},
@@ -408,7 +381,7 @@ export default {
     },
     // 全选
     selectionAllSelect() {
-      this.tableData.map((item) => {
+      this.tableData.map(item => {
         this.$refs.multipleTable.toggleRowSelection(item)
       })
     },
@@ -424,7 +397,7 @@ export default {
     },
     changeTableData() {
       this.dialogVisible = false
-      this.multipleSelection.map((item) => {
+      this.multipleSelection.map(item => {
         item[this.dialogForm.chargeKey] = this.dialogForm.charge
       })
     }
